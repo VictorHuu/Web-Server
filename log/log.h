@@ -35,13 +35,16 @@ private:
 	locker m_mutex;
 	bool m_close;
 public:
+	bool getCloseFlag()const{
+		return m_close;
+	}
 	static Log* getInstance(){
 		static Log instance;
 		return &instance;
 	}
 	bool init(const char* filename,bool close,int bufsize,int line_thresh,int max_queue_size);
 	static void *flush_log_thread(void *args);
-	void write_log(LogLevel level,const char* format,...);
+	void write_log(Level level,const char* format,...);
 	void flush();
 private:
 	Log()=default;
@@ -56,5 +59,10 @@ private:
 
 
 };
-
+#define META(LEVEL,format,...) if(0 == Log::getInstance()->getCloseFlag()) {Log::getInstance()->write_log(LEVEL,"(PID=%d) %s%s%s:%d%s " format,getpid(),COLOR_RESET,BOLD,__FILE__,__LINE__,COLOR_RESET, ##__VA_ARGS__); Log::getInstance()->flush();}
+#define LOG_DEBUG(format, ...) META(DEBUG,format,##__VA_ARGS__)
+#define LOG_INFO(format, ...) META(INFO,format,##__VA_ARGS__)
+#define LOG_WARN(format, ...) META(WARN,format,##__VA_ARGS__)
+#define LOG_ERROR(format, ...) META(ERROR,format,##__VA_ARGS__)
+#define LOG_FATAL(format, ...) META(FATAL,format,##__VA_ARGS__)
 #endif

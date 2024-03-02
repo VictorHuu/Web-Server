@@ -3,7 +3,7 @@
 bool Log::init(const char *filename, bool close, int bufsize, int line_thresh, int max_queue_size)
 {
     if(max_queue_size>=1){
-        m_async=false;
+        m_async=true;
         m_block_q=new block_queue<char*>(max_queue_size);
 
         pthread_t tid;
@@ -53,13 +53,15 @@ void *Log::flush_log_thread(void *args)
     return NULL;
 }
 
-void Log::write_log(LogLevel level, const char *format, ...)
+void Log::write_log(Level level_, const char *format, ...)
 {
     struct timeval now={0,0};
     gettimeofday(&now, NULL);
     time_t t = now.tv_sec;
     struct tm *now_tm = localtime(&t);
     char s[32]={};
+    LogLevel level;
+    level.setLevel(level_);
     strcpy(s,level.toColoredString());
     
     m_mutex.lock();
@@ -98,9 +100,9 @@ void Log::write_log(LogLevel level, const char *format, ...)
     va_start(arg,format);
     char * log_buf;
     m_mutex.lock();
-    int n=snprintf(m_buf,120, "\033[1m%s:%d (PID:%d)-%s[%d-%02d-%02d %02d:%02d:%02d.%06ld]  %s ",__FILE__,__LINE__,getpid(),COLOR_GRAY,
+    int n=snprintf(m_buf,120, "\033[1m%s %s[%d-%02d-%02d %02d:%02d:%02d.%06ld]-",s,COLOR_GRAY,
                      now_tm->tm_year + 1900, now_tm->tm_mon + 1, now_tm->tm_mday,
-                     now_tm->tm_hour, now_tm->tm_min, now_tm->tm_sec, now.tv_usec,s);
+                     now_tm->tm_hour, now_tm->tm_min, now_tm->tm_sec, now.tv_usec);
     int m=vsnprintf(m_buf+n,m_buffer_size-n-1,format,arg);
     m_buf[n+m]='\n';
     m_buf[n+m+1]='\0';

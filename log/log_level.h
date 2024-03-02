@@ -29,6 +29,7 @@ class LogLevel{
 #define COLOR_FATAL    "\033[31m"
 #define COLOR_RESET   "\x1b[0m"
 #define COLOR_GRAY "\033[90m"
+#define BOLD "\033[1m"
 public:
 	
 	const char* toColoredString();
