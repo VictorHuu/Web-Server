@@ -24,8 +24,8 @@ class LogLevel{
 	Level m_level;
 #define COLOR_DEBUG     "\x1b[97m"
 #define COLOR_INFO   "\x1b[34m"
-#define COLOR_WARN  "\x1b[33m"
-#define COLOR_ERROR    "\033[33;2m"
+#define COLOR_WARN  "\x1b[35m"
+#define COLOR_ERROR    "\033[33m"
 #define COLOR_FATAL    "\033[31m"
 #define COLOR_RESET   "\x1b[0m"
 #define COLOR_GRAY "\033[90m"

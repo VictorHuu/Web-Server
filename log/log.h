@@ -65,7 +65,10 @@ private:
 
 
 };
-#define META(LEVEL,format,...) if(0 == Log::getInstance()->getCloseFlag()) {Log::getInstance()->write_log(LEVEL,"(PID=%d) %s%s%s:%d%s " format,getpid(),COLOR_RESET,BOLD,__FILE__,__LINE__,COLOR_RESET, ##__VA_ARGS__); Log::getInstance()->flush();}
+#ifndef _LEVEL
+#define _LEVEL DEBUG
+#endif
+#define META(LEVEL,format,...) if(0 == Log::getInstance()->getCloseFlag()&&_LEVEL<=LEVEL) {Log::getInstance()->write_log(LEVEL,"(PID=%d) %s%s%s:%d%s " format,getpid(),COLOR_RESET,BOLD,__FILE__,__LINE__,COLOR_RESET, ##__VA_ARGS__); Log::getInstance()->flush();}
 #define LOG_DEBUG(format, ...) META(DEBUG,format,##__VA_ARGS__)
 #define LOG_INFO(format, ...) META(INFO,format,##__VA_ARGS__)
 #define LOG_WARN(format, ...) META(WARN,format,##__VA_ARGS__)

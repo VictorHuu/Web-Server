@@ -63,7 +63,6 @@ void Log::write_log(Level level_, const char *format, ...)
     char s[32]={};
     LogLevel level;
     level.setLevel(level_);
-    setLevel(level_);
     strcpy(s,level.toColoredString());
     
     m_mutex.lock();
@@ -115,10 +114,10 @@ void Log::write_log(Level level_, const char *format, ...)
     }else{
         m_mutex.lock();
         if(level.getLevel()==FATAL||level.getLevel()==ERROR){
-            fputs(log_buf,stdout);
             fputs(log_buf,m_fps[1]);
         }else
             fputs(log_buf,m_fps[0]);
+        fputs(log_buf,stdout);
         m_mutex.unlock();
     }
     va_end(arg);
@@ -131,6 +130,7 @@ void Log::flush()
     m_mutex.lock();
     fflush(m_fps[0]);
     fflush(m_fps[1]);
+    fflush(stdout);
     m_mutex.unlock();
 }
 
@@ -147,10 +147,10 @@ void Log::async_write_log()
 	while(m_block_q->pop(single_log)){
 		m_mutex.lock();
         if(getLevel()==FATAL||getLevel()==ERROR){
-            fputs(single_log,stdout);
             fputs(single_log,m_fps[1]);
         }else
             fputs(single_log,m_fps[0]);
+        fputs(single_log,stdout);
 		m_mutex.unlock();
 	}
 }
