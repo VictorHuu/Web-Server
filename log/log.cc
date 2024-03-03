@@ -24,6 +24,7 @@ bool Log::init(const char *filename, bool close, int bufsize, int line_thresh, i
 
     if(relative_name==NULL){
         snprintf(log_full_name,MAX_TOTAL_LOG_NAME,"%d-%02d-%02d-%s",now_tm->tm_year+1900,now_tm->tm_mon+1,now_tm->tm_mday,filename);
+        strcpy(log_name,filename);
     }else{
         relative_name++;
         strcpy(log_name,relative_name);
@@ -62,6 +63,7 @@ void Log::write_log(Level level_, const char *format, ...)
     char s[32]={};
     LogLevel level;
     level.setLevel(level_);
+    setLevel(level_);
     strcpy(s,level.toColoredString());
     
     m_mutex.lock();
@@ -82,13 +84,13 @@ void Log::write_log(Level level_, const char *format, ...)
         fclose(m_fps[1]);
         char new_log[MAX_TOTAL_LOG_NAME+24]="";
         char date[16]="";
-        snprintf(date,16,"%d-%02d-%02d",now_tm->tm_year,now_tm->tm_mon,now_tm->tm_mday);
+        snprintf(date,16,"%d-%02d-%02d",now_tm->tm_year+1900,now_tm->tm_mon+1,now_tm->tm_mday);
         if(now_tm->tm_mday>m_today){
             snprintf(new_log,MAX_TOTAL_LOG_NAME+sizeof(date),"%s%s%s",dir_name,date,log_name);
             m_today=now_tm->tm_mday;
             m_count=0;
         }else{
-            snprintf(new_log,MAX_TOTAL_LOG_NAME+sizeof(date)+sizeof(intmax_t),"%s%s%s.%ju",dir_name,date,log_name,(intmax_t)(m_count/m_line_threshold));
+            snprintf(new_log,MAX_TOTAL_LOG_NAME+sizeof(date)+sizeof(intmax_t),"%s%s-%s.%ju",dir_name,date,log_name,(intmax_t)(m_count/m_line_threshold));
         }
         m_fps[0]=fopen(new_log,"a");
         char new_err_log[MAX_TOTAL_LOG_NAME+29]="";
@@ -112,7 +114,6 @@ void Log::write_log(Level level_, const char *format, ...)
         m_block_q->push(log_buf);
     }else{
         m_mutex.lock();
-        
         if(level.getLevel()==FATAL||level.getLevel()==ERROR){
             fputs(log_buf,stdout);
             fputs(log_buf,m_fps[1]);
@@ -145,8 +146,11 @@ void Log::async_write_log()
     char* single_log;
 	while(m_block_q->pop(single_log)){
 		m_mutex.lock();
-		fflush(m_fps[0]);
-        fflush(m_fps[1]);
+        if(getLevel()==FATAL||getLevel()==ERROR){
+            fputs(single_log,stdout);
+            fputs(single_log,m_fps[1]);
+        }else
+            fputs(single_log,m_fps[0]);
 		m_mutex.unlock();
 	}
 }

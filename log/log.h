@@ -27,7 +27,7 @@ private:
 	intmax_t m_count;
     short m_today;
 	FILE* m_fps[2];//0 for regular,1 for error
-	#define m_fp &m_fps[0]
+	Level m_level;
 	
 	char* m_buf;
 	block_queue<char*>* m_block_q;
@@ -41,6 +41,12 @@ public:
 	static Log* getInstance(){
 		static Log instance;
 		return &instance;
+	}
+	void setLevel(const Level& level_){
+		m_level=level_;
+	}
+	Level getLevel() const{
+		return m_level;
 	}
 	bool init(const char* filename,bool close,int bufsize,int line_thresh,int max_queue_size);
 	static void *flush_log_thread(void *args);
