@@ -22,6 +22,8 @@ OBJECTS=$(SOURCE:.cc=.o)
 
 all: $(TARGET1) $(TARGET2) $(TARGET3) $(TARGET4) $(TARGET)
 
+
+
 main.o: main.cc
 	$(CXX) -c main.cc -o main.o
 
@@ -45,6 +47,6 @@ $(TARGET): $(OBJECTS) $(TARGET2) $(TARGET3) $(TARGET4) | lib
 
 lib:
 	mkdir -p lib
-
+	export LD_LIBRARY_PATH=./lib
 clean:
 	rm -rf $(OBJECTS) $(TARGET) lib
