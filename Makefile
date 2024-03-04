@@ -8,12 +8,12 @@ TARGET3=lib/libhttpconn.so
 TARGET=webserver
 
 SOURCE1=log/log.cc log/log_level.cc log/block_queue.cc
-SOURCE2=timer/util_timer.cpp
+SOURCE2=timer/util_timer.cc
 SOURCE3=http_conn/http_conn.cc
 SOURCE=main.cc
 
 OBJECTS1=$(SOURCE1:.cc=.o)
-OBJECTS2=$(SOURCE2:.cpp=.o)
+OBJECTS2=$(SOURCE2:.cc=.o)
 OBJECTS3=$(SOURCE3:.cc=.o)
 OBJECTS=$(SOURCE:.cc=.o)
 
