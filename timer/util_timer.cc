@@ -1,185 +1,83 @@
-#include "util_timer.h"
-static int epollfd = 0;
-void m_cb_func( client_data* user_data )
+#ifndef HEAP_TIMER_H
+#define HEAP_TIMER_H
+
+#include <queue>
+#include <unordered_map>
+#include <time.h>
+#include <algorithm>
+#include <arpa/inet.h> 
+#include <assert.h> 
+#include <chrono>
+#include<sys/epoll.h>
+#include "../log/log.h"
+#define TIMESLOT 5
+#define BUFFER_SIZE 64
+struct util_timer_node;
+struct client_data
 {
-    epoll_ctl( epollfd, EPOLL_CTL_DEL, user_data->sockfd, 0 );
-    assert( user_data );
-    close( user_data->sockfd );
-    char ip[INET_ADDRSTRLEN]="";
-    inet_ntop(AF_INET,&user_data->address.sin_addr.s_addr,ip,INET6_ADDRSTRLEN);
-    printf( "close fd %d from %s\n", user_data->sockfd,ip);
-}
-size_t heap_util_timer::getIndex(util_timer_node *node)
-{
-    int len=heap_.size();
-    for(int i=0;i<len;i++){
-        if(heap_[i]->id==node->id){
-            return i;
-        }
-    }
-    return 0;
-}
-void heap_util_timer::shiftup_(size_t i)
-{
-    if(i >= heap_.size()){
-        LOG_ERROR("Index i %lu out of range %lu",i,heap_.size());
-        return;
-    }
-    size_t j = (i - 1) / 2;
-    while(j >= 0) {
-        if(heap_[j] < heap_[i]) { break; }
-        SwapNode_(i, j);
-        i = j;
-        j = (i - 1) / 2;
-    }
-}
+    sockaddr_in address;
 
-void heap_util_timer::SwapNode_(size_t i, size_t j) {
-    if(i >= heap_.size()){
-        LOG_ERROR("Index i %lu out of range %lu",i,heap_.size());
-        return;
+    int sockfd;
+	char buf[ BUFFER_SIZE ];
+    util_timer_node* timer;
+};
+void m_cb_func( client_data* user_data );
+struct util_timer_node {
+	int id;
+    client_data* user_data;
+    time_t expire;
+	void (*cb_func)( client_data* );
+    bool operator<(const util_timer_node& t) {
+        return expire < t.expire;
     }
-    if(j >= heap_.size()){
-        LOG_ERROR("Index j %lu out of range %lu",j,heap_.size());
-        return;
-    }
-    std::swap(heap_[i], heap_[j]);
-    ref_[heap_[i]->id] = i;
-    ref_[heap_[j]->id] = j;
-} 
+	util_timer_node(int id_,client_data* ud,int timeout,void(*cb_)(client_data*)):id(id_){
+		time_t cur = time( NULL );
+		user_data=ud;
+		expire=cur+timeout;
+		cb_func=cb_;
+	}
+	util_timer_node(){
+		time_t cur = time( NULL );
+		user_data=NULL;
+		expire=cur+3*TIMESLOT;
+		cb_func=NULL;
+	}
+};
+class heap_util_timer {
+public:
+    heap_util_timer() { heap_.reserve(m_capacity); }
 
-bool heap_util_timer::siftdown_(size_t index, size_t n) {
-    if(index >= heap_.size()){
-        LOG_ERROR("Index index %lu out of range %lu",index,heap_.size());
-        return false;
-    }
-    if(n > heap_.size()){
-        LOG_ERROR("Index n %lu out of range %lu",n,heap_.size());
-        return false;
-    }
-    size_t i = index;
-    size_t j = i * 2 + 1;
-    while(j < n) {
-        if(j + 1 < n && heap_[j + 1] < heap_[j]) j++;
-        if(heap_[i] < heap_[j]) break;
-        SwapNode_(i, j);
-        i = j;
-        j = i * 2 + 1;
-    }
-    return i > index;
-}
+    ~heap_util_timer() { clear(); }
+    
+    void adjust_timer(util_timer_node* node, int newExpires=3*TIMESLOT);
 
-void heap_util_timer::doWork(int id) {
-    if(heap_.empty()){
-        LOG_ERROR("Can't remove timer from an empty heap");
-        return;
-    }
-    if(ref_.count(id)==0){
-        LOG_ERROR("The node you want to adjust doesn't exist in the node");
-        return;
-    }
-    size_t i = ref_[id];
-    util_timer_node* node = heap_[i];
-    node->cb_func(node->user_data);
-    del_timer(node);
-}
+    void add_timer(util_timer_node* node);
 
-void heap_util_timer::del_timer(util_timer_node* node) {
-    if(node==NULL){
-        LOG_FATAL("The node is NULL hence there're no id");
-        return;
-    }
-    int index=getIndex(node);
-    if(heap_.empty()){
-        LOG_ERROR("Can't remove timer from an empty heap");
-        return;
-    }
-    if(index>=heap_.size()){
-        LOG_ERROR("Index %d out of range %d",index,heap_.size());
-        return;
-    }
-    size_t i = index;
-    size_t n = heap_.size() - 1;
+    void doWork(int id);
 
-    if(i < n) {
-        SwapNode_(i, n);
-        if(!siftdown_(i, n)) {
-            shiftup_(i);
-        }
-    }
-    heap_.pop_back();
-}
+    void clear();
 
-void heap_util_timer::adjust_timer(util_timer_node* node, int timeout) {
+    void tick();
 
-    if(node==NULL){
-        LOG_FATAL("The node is NULL hence there're no id");
-        return;
-    }
+    void pop();
 
-    /* 调整指定id的结点 */
-    int id=node->id;
-    if(heap_.empty()){
-        LOG_ERROR("Can't remove timer from an empty heap");
-        return;
-    }
-    if(ref_.count(id)==0){
-        LOG_ERROR("The node %d you want to adjust doesn't exist in the node",id);
-        return;
-    }
+    int GetNextTick();
 
-    time_t cur=time(NULL);
-    heap_[ref_[id]]->expire = cur+timeout;
+	void del_timer(util_timer_node* node);
+private:
+    
+    size_t getIndex(util_timer_node* node) ;
+    void shiftup_(size_t i);
 
-    siftdown_(ref_[id], heap_.size());
+    bool siftdown_(size_t index, size_t n);
 
-}
+    void SwapNode_(size_t i, size_t j);
 
-void heap_util_timer::add_timer(util_timer_node *node)
-{
-    LOG_DEBUG("the new id is %d,there're %d nodes",node->id,heap_.size());
-    size_t i;
-    i = heap_.size();
-    ref_[node->id]=i;
-    heap_.push_back(node);
-    shiftup_(i);
-}
+    std::vector<util_timer_node*> heap_;
 
-void heap_util_timer::tick() {
-    if(heap_.empty()) {
-        return;
-    }
-    printf( "timer tick\n" );
-    while(!heap_.empty()) {
-        util_timer_node* node = heap_.front();
-        time_t cur=time(NULL);
-        if(node->expire-cur>0)
-            break;
-        node->cb_func(node->user_data);
-        pop();
-    }
-}
+    std::unordered_map<int, size_t> ref_;
+	size_t m_capacity;
+	size_t m_size;
+};
 
-void heap_util_timer::pop() {
-    if(heap_.empty()){
-        LOG_ERROR("Can't pop timer from an empty heap");
-        return;
-    }
-    del_timer(heap_[0]);
-}
-
-void heap_util_timer::clear() {
-    ref_.clear();
-    heap_.clear();
-}
-
-int heap_util_timer::GetNextTick() {
-    tick();
-    size_t res = -1;
-    if(!heap_.empty()) {
-        int cur=time(NULL);
-        res=heap_.front()->expire-cur;
-        if(res < 0) { res = 0; }
-    }
-    return res;
-}
+#endif //HEAP_TIMER_H
