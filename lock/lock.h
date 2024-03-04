@@ -1,4 +1,4 @@
-#include "log.h"
+#include "../log.h"
 
 bool Log::init(const char *filename, bool close, int bufsize, int line_thresh, int max_queue_size)
 {
