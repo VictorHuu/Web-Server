@@ -1,5 +1,5 @@
 #include "http_conn.h"
-
+#include<string.h>
 // 定义HTTP响应的一些状态信息
 const char* ok_200_title = "OK";
 const char* error_400_title = "Bad Request";
@@ -12,7 +12,7 @@ const char* error_500_title = "Internal Error";
 const char* error_500_form = "There was an unusual problem serving the requested file.\n";
 
 // 网站的根目录
-const char* doc_root = "/home/victor/testrepo/5thProject/webserver/resources";
+const char* doc_root = "/home/victor/sylar/resources";
 
 int setnonblocking( int fd ) {
     int old_option = fcntl( fd, F_GETFL );
@@ -125,6 +125,7 @@ http_conn::LINE_STATUS http_conn::parse_line() {
     char temp;
     for ( ; m_checked_idx < m_read_idx; ++m_checked_idx ) {
         temp = m_read_buf[ m_checked_idx ];
+
         if ( temp == '\r' ) {
             if ( ( m_checked_idx + 1 ) == m_read_idx ) {
                 return LINE_OPEN;
@@ -143,6 +144,7 @@ http_conn::LINE_STATUS http_conn::parse_line() {
             return LINE_BAD;
         }
     }
+    
     return LINE_OPEN;
 }
 // 解析HTTP请求行，获得请求方法，目标URL,以及HTTP版本号
@@ -240,7 +242,7 @@ http_conn::HTTP_CODE http_conn::parse_headers(char* text) {
         m_upgrade_insecure_requests = text;
     }
     else{
-        printf( "oop! unknow header %s\n", text );
+        LOG_FATAL( "oop! unknow header %s\n", text );
     }
     return NO_REQUEST;
 }
@@ -265,8 +267,6 @@ http_conn::HTTP_CODE http_conn::process_read() {
         // 获取一行数据
         text = get_line();
         m_start_line = m_checked_idx;
-        printf( "got 1 http line: %s\n", text );
-
         switch ( m_check_state ) {
             case CHECK_STATE_REQUESTLINE: {
                 ret = parse_request_line( text );
@@ -405,9 +405,9 @@ bool http_conn::add_status_line( int status, const char* title ) {
     return add_response( "%s %d %s\r\n", "HTTP/1.1", status, title );
 }
 
-bool http_conn::add_headers(int content_len) {
+bool http_conn::add_headers(int content_len,const char* content_type) {
     add_content_length(content_len);
-    add_content_type();
+    add_content_type(content_type);
     add_linger();
     add_blank_line();
 }
@@ -438,10 +438,48 @@ bool http_conn::add_content( const char* content )
     return add_response( "%s", content );
 }
 
-bool http_conn::add_content_type() {
-    return add_response("Content-Type:%s\r\n", "text/html");
+bool http_conn::add_content_type(const char* content_type) {
+    return add_response("Content-Type:%s\r\n", content_type);
 }
+const char* http_conn::find_value(const char *filename, const char *key) {
+#define MAX_LINE_LENGTH 25
+    static char value[MAX_LINE_LENGTH];
+    FILE *file = fopen(filename, "r");
+    if (file == NULL) {
+        printf("Failed to open config file\n");
+        return NULL;
+    }
 
+    char line[MAX_LINE_LENGTH];
+    while (fgets(line, MAX_LINE_LENGTH, file) != NULL) {
+        // 使用 strtok 函数分割行
+        char *token = strtok(line, ":");
+        if (token != NULL) {
+            // 如果 key 匹配，则返回对应的 value
+            if (strstr(key,token)) {
+                token = strtok(NULL, ":");
+                if (token != NULL) {
+                    char *newline = strchr(token, '\n');
+                    if (newline != NULL) {
+                        *newline = '\0';
+                    }
+                    newline = strchr(line, '\r');
+                    if (newline != NULL) {
+                        *newline = '\0';
+                    }
+                    strcpy(value, token);
+                    fclose(file);
+#undef MAX_LINE_LENGTH
+                    return value;
+                }
+            }
+        }
+    }
+
+    fclose(file);
+#undef MAX_LINE_LENGTH
+    return NULL;
+}
 // 根据服务器处理HTTP请求的结果，决定返回给客户端的内容
 bool http_conn::process_write(HTTP_CODE ret) {
     switch (ret)
@@ -474,15 +512,27 @@ bool http_conn::process_write(HTTP_CODE ret) {
                 return false;
             }
             break;
-        case FILE_REQUEST:
+        case FILE_REQUEST:{
             add_status_line(200, ok_200_title );
-            add_headers(m_file_stat.st_size);
+            //TODO :optimize by ENUM or File I/O
+            //Judge if it's image or not
+            const char* mime=find_value("formatlist.txt",m_url);
+            bool not_image=(mime==NULL);
+            //Judge if
+            if(not_image){
+                LOG_ERROR("URL is just a text html\n");
+                add_headers(m_file_stat.st_size);
+            }else{
+                LOG_INFO("URL contains *%s*\n", mime);
+                add_headers(m_file_stat.st_size,mime);
+            }
             m_iv[ 0 ].iov_base = m_write_buf;
             m_iv[ 0 ].iov_len = m_write_idx;
             m_iv[ 1 ].iov_base = m_file_address;
             m_iv[ 1 ].iov_len = m_file_stat.st_size;
             m_iv_count = 2;
             return true;
+        }
         default:
             return false;
     }

@@ -23,21 +23,15 @@ static int pipefd[2];
 static heap_util_timer timer_lst;
 static int epollfd = 0;
 
-
+extern void addfd( int epollfd, int fd, bool one_shot );
+extern void removefd( int epollfd, int fd );
 void addfd( int epollfd, int fd )
 {
     epoll_event event;
     event.data.fd = fd;
-    event.events = EPOLLIN | EPOLLET;
+    event.events = EPOLLIN | EPOLLET |EPOLLOUT;
     epoll_ctl( epollfd, EPOLL_CTL_ADD, fd, &event );
     setnonblocking( fd );
-}
-void addsig(int sig, void( handler )(int)){
-    struct sigaction sa;
-    memset( &sa, '\0', sizeof( sa ) );
-    sa.sa_handler = handler;
-    sigfillset( &sa.sa_mask );
-    assert( sigaction( sig, &sa, NULL ) != -1 );
 }
 void sig_handler( int sig )
 {
@@ -46,22 +40,16 @@ void sig_handler( int sig )
     send( pipefd[1], ( char* )&msg, 1, 0 );
     errno = save_errno;
 }
-
-void addsig( int sig )
-{
+void addsig(int sig, void( handler )(int)=sig_handler){
     struct sigaction sa;
     memset( &sa, '\0', sizeof( sa ) );
-    sa.sa_handler = sig_handler;
-    sa.sa_flags |= SA_RESTART;
+    sa.sa_handler = handler;
     sigfillset( &sa.sa_mask );
     assert( sigaction( sig, &sa, NULL ) != -1 );
 }
-
 void timer_handler()
 {
-    
-    timer_lst.tick();
-    
+    timer_lst.tick();   
     alarm(TIMESLOT);
 }
 
@@ -77,14 +65,17 @@ void cb_func( client_data* user_data )
 }
 static int cnt=0;
 int main( int argc, char* argv[] ) {
+    //Log initialization
     Log *log;
     log->getInstance()->init("minheap",false,1024,10,2);
     log->getInstance()->setLevel(DEBUG);
+    //Parse args
     if( argc <= 1 ) {
         printf( "usage: %s port_number\n", basename( argv[0] ) );
         return 1;
     }
     int port = atoi( argv[1] );
+
     addsig( SIGPIPE, SIG_IGN );
 
     threadpool< http_conn >* pool = NULL;
@@ -95,6 +86,9 @@ int main( int argc, char* argv[] ) {
     }
 
     http_conn* userconns = new http_conn[ FD_LIMIT ];
+    client_data* users = new client_data[FD_LIMIT]; 
+
+    int listenfd = socket( PF_INET, SOCK_STREAM, 0 );
 
     int ret = 0;
     struct sockaddr_in address;
@@ -103,32 +97,26 @@ int main( int argc, char* argv[] ) {
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons( port );
 
-    int listenfd = socket( PF_INET, SOCK_STREAM, 0 );
-    assert( listenfd >= 0 );
-
+    // 端口复用
+    int reuse = 1;
+    setsockopt( listenfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof( reuse ) );
     ret = bind( listenfd, ( struct sockaddr* )&address, sizeof( address ) );
-    assert( ret != -1 );
-
     ret = listen( listenfd, 5 );
-    assert( ret != -1 );
 
     epoll_event events[ MAX_EVENT_NUMBER ];
     int epollfd = epoll_create( 5 );
-    assert( epollfd != -1 );
-    addfd( epollfd, listenfd );
 
-    
+    addfd( epollfd, listenfd, false );
+    http_conn::m_epollfd = epollfd;
+
     ret = socketpair(PF_UNIX, SOCK_STREAM, 0, pipefd);
-    assert( ret != -1 );
     setnonblocking( pipefd[1] );
-    addfd( epollfd, pipefd[0] );
-
-    
+    addfd( epollfd, pipefd[0]);
     addsig( SIGALRM );
     addsig( SIGTERM );
     bool stop_server = false;
 
-    client_data* users = new client_data[FD_LIMIT]; 
+    
     bool timeout = false;
     alarm(TIMESLOT);  
 
@@ -147,7 +135,17 @@ int main( int argc, char* argv[] ) {
                 struct sockaddr_in client_address;
                 socklen_t client_addrlength = sizeof( client_address );
                 int connfd = accept( listenfd, ( struct sockaddr* )&client_address, &client_addrlength );
-                addfd( epollfd, connfd );
+
+                if ( connfd < 0 ) {
+                    printf( "errno is: %d\n", errno );
+                    continue;
+                } 
+
+                if( http_conn::m_user_count >= FD_LIMIT ) {
+                    close(connfd);
+                    continue;
+                }
+
                 users[connfd].address = client_address;
                 users[connfd].sockfd = connfd;
                 
@@ -155,6 +153,7 @@ int main( int argc, char* argv[] ) {
                 util_timer_node* timer = new util_timer_node(cnt++,&users[connfd],3 * TIMESLOT,cb_func);
                 users[connfd].timer = timer;
                 timer_lst.add_timer( timer );
+                
                 userconns[connfd].init( connfd, client_address);
             }else if( events[i].events & ( EPOLLRDHUP | EPOLLHUP | EPOLLERR ) ) {
 
@@ -188,9 +187,6 @@ int main( int argc, char* argv[] ) {
             }
             else if(  events[i].events & EPOLLIN )
             {
-                memset( users[sockfd].buf, '\0', BUFFER_SIZE );
-                ret = recv( sockfd, users[sockfd].buf, BUFFER_SIZE-1, 0 );
-                LOG_DEBUG( "get %d bytes of client data %s from %d\n", ret, users[sockfd].buf, sockfd );
 
                 if(userconns[sockfd].read()) {
                     pool->append(userconns + sockfd,0);
