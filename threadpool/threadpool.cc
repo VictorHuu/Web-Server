@@ -1,4 +1,6 @@
 #include"threadpool.h"
+#ifndef VICTOR_THREADPOOL_CC
+#define VICTOR_THREADPOOL_CC
 template <typename T>
 threadpool<T>::threadpool(int thread_num, int max_requests)
 {
@@ -54,7 +56,7 @@ bool threadpool<T>::append(T *request, int state)
 		return false;
 	}
 
-	request->m_state=state;
+	//request->m_state=state;
 	m_workqueue.push(request);
 	pthread_mutex_unlock(&m_queuelocker);
 	sem_post(&m_queuestat);
@@ -90,3 +92,4 @@ inline void threadpool<T>::run()
 		request->process();
 	}
 }
+#endif
