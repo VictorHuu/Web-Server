@@ -157,11 +157,19 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char* text) {
     // GET\0/index.html HTTP/1.1
     *m_url++ = '\0';    // 置位空字符，字符串结束符
     char* method = text;
-    if ( strcasecmp(method, "GET") == 0 ) { // 忽略大小写比较
-        m_method = GET;
-    } else {
+#define XX(METHOD) if( strcasecmp(method, #METHOD) == 0 ) { \
+        m_method = METHOD; \
+    } 
+    XX(GET)
+    else XX(HEAD)
+    else XX(POST)
+    else XX(DELETE)
+    else XX(PUT)
+    else XX(OPTIONS)
+    else XX(TRACE)
+    else
         return BAD_REQUEST;
-    }
+#undef XX
     // /index.html HTTP/1.1
     // 检索字符串 str1 中第一个不在字符串 str2 中出现的字符下标。
     m_version = strpbrk( m_url, " \t" );
@@ -526,12 +534,26 @@ bool http_conn::process_write(HTTP_CODE ret) {
                 LOG_INFO("URL contains *%s*\n", mime);
                 add_headers(m_file_stat.st_size,mime);
             }
-            m_iv[ 0 ].iov_base = m_write_buf;
-            m_iv[ 0 ].iov_len = m_write_idx;
-            m_iv[ 1 ].iov_base = m_file_address;
-            m_iv[ 1 ].iov_len = m_file_stat.st_size;
-            m_iv_count = 2;
+            switch(m_method){
+                case HEAD:
+                    m_iv[ 0 ].iov_base = m_write_buf;
+                    m_iv[ 0 ].iov_len = m_write_idx;
+                    m_iv_count = 1;
+                case GET:
+                    m_iv[ 1 ].iov_base = m_file_address;
+                    m_iv[ 1 ].iov_len = m_file_stat.st_size;
+                    m_iv_count++;
+                    return true;
+                case OPTIONS:
+                    add_response("Allow: %s,%s,%s，%s","HEAD","GET","DELETE","OPTIONS");
+                    break;
+                default:
+                    break;
+            }
             return true;
+            
+            
+            
         }
         default:
             return false;
