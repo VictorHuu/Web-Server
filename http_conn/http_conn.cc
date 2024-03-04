@@ -2,6 +2,7 @@
 #include<string.h>
 // 定义HTTP响应的一些状态信息
 const char* ok_200_title = "OK";
+const char* ok_204_title = "No Content";
 const char* error_400_title = "Bad Request";
 const char* error_400_form = "Your request has bad syntax or is inherently impossible to satisfy.\n";
 const char* error_403_title = "Forbidden";
@@ -159,7 +160,8 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char* text) {
     char* method = text;
 #define XX(METHOD) if( strcasecmp(method, #METHOD) == 0 ) { \
         m_method = METHOD; \
-    } 
+    } \
+
     XX(GET)
     else XX(HEAD)
     else XX(POST)
@@ -521,31 +523,47 @@ bool http_conn::process_write(HTTP_CODE ret) {
             }
             break;
         case FILE_REQUEST:{
-            add_status_line(200, ok_200_title );
+            if(m_method==DELETE)
+                add_status_line(204, ok_204_title );
+            else{
+                add_status_line(200, ok_200_title );
+            }
             //TODO :optimize by ENUM or File I/O
             //Judge if it's image or not
-            const char* mime=find_value("formatlist.txt",m_url);
-            bool not_image=(mime==NULL);
-            //Judge if
-            if(not_image){
-                LOG_ERROR("URL is just a text html\n");
-                add_headers(m_file_stat.st_size);
-            }else{
-                LOG_INFO("URL contains *%s*\n", mime);
-                add_headers(m_file_stat.st_size,mime);
+            if(m_method!=OPTIONS){
+                const char* mime=find_value("formatlist.txt",m_url);
+                bool not_image=(mime==NULL);
+                //Judge if
+                if(not_image){
+                    LOG_ERROR("URL is just a text html\n");
+                    add_headers(m_file_stat.st_size);
+                }else{
+                    LOG_INFO("URL contains *%s*\n", mime);
+                    add_headers(m_file_stat.st_size,mime);
+                }
             }
             switch(m_method){
-                case HEAD:
-                    m_iv[ 0 ].iov_base = m_write_buf;
-                    m_iv[ 0 ].iov_len = m_write_idx;
-                    m_iv_count = 1;
-                case GET:
-                    m_iv[ 1 ].iov_base = m_file_address;
-                    m_iv[ 1 ].iov_len = m_file_stat.st_size;
-                    m_iv_count++;
+                case GET:{
+                    m_iv[0].iov_base = m_write_buf;
+                    m_iv[0].iov_len = m_write_idx;
+                    m_iv[1].iov_base = m_file_address;
+                    m_iv[1].iov_len = m_file_stat.st_size;
+                    m_iv_count = 2;
                     return true;
+                }
+                case DELETE:
+                    remove(m_real_file);
+                case HEAD:{
+                    m_iv[0].iov_base = m_write_buf;
+                    m_iv[0].iov_len = m_write_idx;
+                    m_iv_count =1;
+                    return true;
+                }
                 case OPTIONS:
-                    add_response("Allow: %s,%s,%s，%s","HEAD","GET","DELETE","OPTIONS");
+                    add_response("Allow: %s,%s,%s","HEAD","GET","OPTIONS");
+                    m_iv[0].iov_base = m_write_buf;
+                    m_iv[0].iov_len = m_write_idx;
+                    m_iv_count =1;
                     break;
                 default:
                     break;
