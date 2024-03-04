@@ -48,5 +48,5 @@ private:
     int m_front;
     int m_back;
 };
-
+#include"block_queue.cc"
 #endif

@@ -14,6 +14,7 @@
 #include <pthread.h>
 #include "timer/util_timer.h"
 #include"http_conn/http_conn.h"
+#include"threadpool/threadpool.h"
 #define FD_LIMIT 65535
 #define MAX_EVENT_NUMBER 1024
 #define TIMESLOT 5
@@ -31,7 +32,13 @@ void addfd( int epollfd, int fd )
     epoll_ctl( epollfd, EPOLL_CTL_ADD, fd, &event );
     setnonblocking( fd );
 }
-
+void addsig(int sig, void( handler )(int)){
+    struct sigaction sa;
+    memset( &sa, '\0', sizeof( sa ) );
+    sa.sa_handler = handler;
+    sigfillset( &sa.sa_mask );
+    assert( sigaction( sig, &sa, NULL ) != -1 );
+}
 void sig_handler( int sig )
 {
     int save_errno = errno;
@@ -78,6 +85,16 @@ int main( int argc, char* argv[] ) {
         return 1;
     }
     int port = atoi( argv[1] );
+    addsig( SIGPIPE, SIG_IGN );
+
+    threadpool< http_conn >* pool = NULL;
+    try {
+        pool = new threadpool<http_conn>;
+    } catch( ... ) {
+        return 1;
+    }
+
+    http_conn* userconns = new http_conn[ FD_LIMIT ];
 
     int ret = 0;
     struct sockaddr_in address;
@@ -138,7 +155,12 @@ int main( int argc, char* argv[] ) {
                 util_timer_node* timer = new util_timer_node(cnt++,&users[connfd],3 * TIMESLOT,cb_func);
                 users[connfd].timer = timer;
                 timer_lst.add_timer( timer );
-            } else if( ( sockfd == pipefd[0] ) && ( events[i].events & EPOLLIN ) ) {
+                userconns[connfd].init( connfd, client_address);
+            }else if( events[i].events & ( EPOLLRDHUP | EPOLLHUP | EPOLLERR ) ) {
+
+                userconns[sockfd].close_conn();
+
+            }else if( ( sockfd == pipefd[0] ) && ( events[i].events & EPOLLIN ) ) {
                 
                 int sig;
                 char signals[1024];
@@ -169,7 +191,13 @@ int main( int argc, char* argv[] ) {
                 memset( users[sockfd].buf, '\0', BUFFER_SIZE );
                 ret = recv( sockfd, users[sockfd].buf, BUFFER_SIZE-1, 0 );
                 LOG_DEBUG( "get %d bytes of client data %s from %d\n", ret, users[sockfd].buf, sockfd );
-                
+
+                if(userconns[sockfd].read()) {
+                    pool->append(userconns + sockfd,0);
+                } else {
+                    userconns[sockfd].close_conn();
+                }
+
                 util_timer_node* timer = users[sockfd].timer;
                 if( ret < 0 )
                 {
@@ -201,7 +229,13 @@ int main( int argc, char* argv[] ) {
                         LOG_DEBUG("Here!");
                     }
                 }
+            }else if( events[i].events & EPOLLOUT ) {
+
+                if( !userconns[sockfd].write() ) {
+                    userconns[sockfd].close_conn();
+                }
             }
+
            
         }
 
@@ -216,5 +250,7 @@ int main( int argc, char* argv[] ) {
     close( pipefd[1] );
     close( pipefd[0] );
     delete [] users;
+    delete [] userconns;
+    delete pool;
     return 0;
 }

@@ -6,10 +6,11 @@
 #include<exception>
 #include<pthread.h>
 #include<semaphore.h>
+
 template <typename T>
 class threadpool{
 public:
-	threadpool(int thread_num,int max_requests);
+	threadpool(int thread_num=8,int max_requests=10000);
 	~threadpool();
 	bool append(T *request, int state);
 
@@ -26,5 +27,6 @@ private:
 	bool m_actor_model;
 
 };
+#include"threadpool.cc"
 #endif
 

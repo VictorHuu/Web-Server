@@ -1,5 +1,6 @@
 #include"block_queue.h"
-
+#ifndef BLOCK_QUEUE_CC
+#define BLOCK_QUEUE_CC
 template <class T>
 block_queue<T>::block_queue(int max_size)
 {
@@ -178,3 +179,4 @@ bool block_queue<T>::pop(T &item, int ms_timeout)
     m_mutex.unlock();
     return true;
 }
+#endif
