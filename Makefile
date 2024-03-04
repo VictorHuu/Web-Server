@@ -19,7 +19,7 @@ OBJECTS=$(SOURCE:.cc=.o)
 
 all: $(TARGET1) $(TARGET2) $(TARGET3) $(TARGET)
 
-export LD_LIBRARY_PATH=lib
+
 
 main.o: main.cc
 	$(CXX) -c main.cc -o main.o
@@ -38,6 +38,6 @@ $(TARGET):$(OBJECTS) $(TARGET2) $(TARGET2) |lib
 	$(CXX)  $(OBJECTS) $(LIBDIR) -llog -ltimer -lhttpconn  -o $(TARGET)
 lib:
 	mkdir -p lib
-
+	export LD_LIBRARY_PATH=./lib
 clean:
 	rm -rf $(OBJECT1) $(TARGET1) $(OBJECT2) $(TARGET2) $(OBJECTS3) $(TARGET3) $(OBJECTS) $(TARGET) lib
