@@ -19,10 +19,15 @@ OBJECTS2=$(SOURCE2:.cc=.o)
 OBJECTS3=$(SOURCE3:.cc=.o)
 OBJECTS4=$(SOURCE4:.cc=.o)
 OBJECTS=$(SOURCE:.cc=.o)
+SOME_FILE := formatlist.txt
 
-all: $(TARGET1) $(TARGET2) $(TARGET3) $(TARGET4) $(TARGET)
-
-
+all:
+	@if [ ! -f $(SOME_FILE) ]; then \
+        	echo "$(SOME_FILE) does not exist, which is for MIME indexing. Aborting."; \
+        	exit 1; \
+    	fi
+	$(MAKE) build
+build: $(TARGET1) $(TARGET2) $(TARGET3) $(TARGET4) $(TARGET)
 
 main.o: main.cc
 	$(CXX) -c main.cc -o main.o
@@ -47,6 +52,6 @@ $(TARGET): $(OBJECTS) $(TARGET2) $(TARGET3) $(TARGET4) | lib
 
 lib:
 	mkdir -p lib
-	export LD_LIBRARY_PATH=./lib
+
 clean:
-	rm -rf $(OBJECTS) $(TARGET) lib
+	rm -rf $(OBJECT1) $(TARGET1) $(OBJECT2) $(TARGET2) $(OBJECTS3) $(TARGET3) $(OBJECTS) $(TARGET) $(OBJECT4) $(TARGET4) error* 20* lib *.gch
