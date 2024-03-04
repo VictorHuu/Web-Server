@@ -8,7 +8,7 @@ TARGET3=lib/libhttpconn.so
 TARGET=webserver
 
 SOURCE1=log/log.cc log/log_level.cc log/block_queue.cc
-SOURCE2=timer/util_timer.cpp
+SOURCE2=timer/util_timer.cc
 SOURCE3=http_conn/http_conn.cc
 SOURCE=main.cc
 
