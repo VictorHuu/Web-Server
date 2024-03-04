@@ -24,6 +24,7 @@ threadpool<T>::threadpool(int thread_num, int max_requests)
         throw std::exception();
     }
 	for(int i=0;i<m_thread_num;i++){
+		printf( "create the %dth thread\n", i);
 		pthread_t threadId;
 		if(pthread_create(&threadId,&m_attr,worker,this)){
 			perror("pthread_create");
