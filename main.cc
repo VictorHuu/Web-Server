@@ -12,8 +12,8 @@
 #include <stdlib.h>
 #include <sys/epoll.h>
 #include <pthread.h>
-#include "util_timer.h"
-
+#include "timer/util_timer.h"
+#include"http_conn/http_conn.h"
 #define FD_LIMIT 65535
 #define MAX_EVENT_NUMBER 1024
 #define TIMESLOT 5
@@ -22,13 +22,6 @@ static int pipefd[2];
 static heap_util_timer timer_lst;
 static int epollfd = 0;
 
-int setnonblocking( int fd )
-{
-    int old_option = fcntl( fd, F_GETFL );
-    int new_option = old_option | O_NONBLOCK;
-    fcntl( fd, F_SETFL, new_option );
-    return old_option;
-}
 
 void addfd( int epollfd, int fd )
 {
@@ -79,6 +72,7 @@ static int cnt=0;
 int main( int argc, char* argv[] ) {
     Log *log;
     log->getInstance()->init("minheap",false,1024,10,2);
+    log->getInstance()->setLevel(DEBUG);
     if( argc <= 1 ) {
         printf( "usage: %s port_number\n", basename( argv[0] ) );
         return 1;
@@ -141,12 +135,7 @@ int main( int argc, char* argv[] ) {
                 users[connfd].sockfd = connfd;
                 
                 
-                util_timer_node* timer = new util_timer_node;
-                timer->user_data = &users[connfd];
-                timer->cb_func = cb_func;
-                time_t cur = time( NULL );
-                timer->expire = cur + 3 * TIMESLOT;
-                timer->id=cnt++;
+                util_timer_node* timer = new util_timer_node(cnt++,&users[connfd],3 * TIMESLOT,cb_func);
                 users[connfd].timer = timer;
                 timer_lst.add_timer( timer );
             } else if( ( sockfd == pipefd[0] ) && ( events[i].events & EPOLLIN ) ) {
@@ -179,7 +168,8 @@ int main( int argc, char* argv[] ) {
             {
                 memset( users[sockfd].buf, '\0', BUFFER_SIZE );
                 ret = recv( sockfd, users[sockfd].buf, BUFFER_SIZE-1, 0 );
-                printf( "get %d bytes of client data %s from %d\n", ret, users[sockfd].buf, sockfd );
+                LOG_DEBUG( "get %d bytes of client data %s from %d\n", ret, users[sockfd].buf, sockfd );
+                
                 util_timer_node* timer = users[sockfd].timer;
                 if( ret < 0 )
                 {
@@ -206,10 +196,8 @@ int main( int argc, char* argv[] ) {
                 {
                     
                     if( timer ) {
-                        time_t cur = time( NULL );
-                        timer->expire = cur + 3 * TIMESLOT;
                         printf( "adjust timer once\n" );
-                        timer_lst.adjust_timer( timer );
+                        timer_lst.adjust_timer( timer,3 * TIMESLOT );
                         LOG_DEBUG("Here!");
                     }
                 }
