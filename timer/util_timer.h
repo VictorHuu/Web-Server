@@ -30,7 +30,7 @@ struct util_timer_node {
     bool operator<(const util_timer_node& t) {
         return expire < t.expire;
     }
-	util_timer_node(client_data* ud,int timeout,void(*cb_)(client_data*)){
+	util_timer_node(int id_,client_data* ud,int timeout,void(*cb_)(client_data*)):id(id_){
 		time_t cur = time( NULL );
 		user_data=ud;
 		expire=cur+timeout;

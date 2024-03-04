@@ -129,7 +129,7 @@ void heap_util_timer::adjust_timer(util_timer_node* node, int timeout) {
     }
 
     time_t cur=time(NULL);
-    heap_[ref_[id]]->expire = node->expire;
+    heap_[ref_[id]]->expire = cur+timeout;
 
     siftdown_(ref_[id], heap_.size());
 
