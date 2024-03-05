@@ -76,13 +76,12 @@ int main( int argc, char* argv[] ) {
     Config* config;
     config->getInstance().parse_arg(argc,argv);
     Config& config_=config->getInstance();
-    //Log initialization
-    Log *log;
-    log->getInstance()->init(config_.get_logname(),config_.get_closelog(),1024,1000,2);
-    log->getInstance()->setLevel(DEBUG);
-    if(config_.get_help()||config_.get_port()==0){
+    
+    if(config_.get_help()||config_.get_port()<=1023||config_.get_threadnum()<=0
+    ||config_.get_logname()==NULL||strlen(config_.get_logname())==0||
+    config_.get_level()==UNKNOWN){
         struct stat statbuf;
-        int manual_fd = open( "manual2.txt", O_RDONLY );
+        int manual_fd = open( "manual.txt", O_RDONLY );
         if(manual_fd==-1)
             ERROR_HANDLE(open);
         int ret=fstat(manual_fd,&statbuf);
@@ -92,16 +91,30 @@ int main( int argc, char* argv[] ) {
         char* manual_address = ( char* )mmap( 0, statbuf.st_size, PROT_READ, MAP_PRIVATE, manual_fd, 0 );
         if(manual_address==MAP_FAILED)
             ERROR_HANDLE(mmap);
-        struct iovec iov[1];
-        iov->iov_base=manual_address;
-        iov->iov_len=statbuf.st_size;
-        if(writev(STDOUT_FILENO,iov,1)==-1)
+        struct iovec iov[2];
+        char errmsg[100]="";
+        if(config_.get_threadnum()<=0)
+            snprintf(errmsg,100,"%sThe threadnum must be greater than 0,but it's %d now%s\n",COLOR_FATAL,config_.get_threadnum(),COLOR_RESET);
+        else if(config_.get_port()<=1023)
+            snprintf(errmsg,100,"%sThe port must be set and greater than 1023,but it's %d now%s\n",COLOR_FATAL,config_.get_port(),COLOR_RESET);
+        else if(config_.get_logname()==NULL||strlen(config_.get_logname())==0)
+            snprintf(errmsg,100,"%sThe name of the log can't be NULL%s\n",COLOR_FATAL,COLOR_RESET);
+        else if(config_.get_level()==UNKNOWN)
+            snprintf(errmsg,100,"%sThe Log Level must be one of the following %s[DEBUG/INFO/WARN/ERROR/FATAL]%s\n",COLOR_FATAL,BOLD,COLOR_RESET);
+        iov[1].iov_base=manual_address;
+        iov[1].iov_len=statbuf.st_size;
+        iov[0].iov_base=errmsg;
+        iov[0].iov_len=strlen(errmsg);
+        if(writev(STDOUT_FILENO,iov,2)==-1)
             ERROR_HANDLE(writev);
         //Free the resources
         munmap(manual_address,statbuf.st_size);
         close(manual_fd);
         return 0;
     }
+    Log *log;
+    log->getInstance()->init(config_.get_logname(),config_.get_closelog(),1024,1000,2);
+    log->getInstance()->setLevel(config_.get_level());
     printf( "usage: %d port_number\n", config_.get_port());
     int port = config_.get_port();
 
@@ -109,7 +122,7 @@ int main( int argc, char* argv[] ) {
 
     threadpool< http_conn >* pool = NULL;
     try {
-        pool = new threadpool<http_conn>;
+        pool = new threadpool<http_conn>(config_.get_threadnum());
     } catch( ... ) {
         return 1;
     }

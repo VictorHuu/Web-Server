@@ -41,7 +41,9 @@ void Config::parse_arg(int argc, char *argv[])
         }
         case 'l':
         {
-            m_loglevel=(Level)atoi(optarg);
+            LogLevel _level;
+            _level.FromString(optarg);
+            m_loglevel=_level.getLevel();
             break;
         }
         case 'o':

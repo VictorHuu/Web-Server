@@ -31,12 +31,13 @@ void LogLevel::FromString(const char* str){
 		if(strcasecmp(str,#v)==0){\
 			m_level=level;\
 		}
-		XX(DEBUG,debug);
-		XX(INFO,info);
-		XX(WARN,warn);
-		XX(ERROR,error);
-		XX(FATAL,fatal);
-		m_level=UNKNOWN;
+		XX(DEBUG,debug)
+		else XX(INFO,info)
+		else XX(WARN,warn)
+		else XX(ERROR,error)
+		else XX(FATAL,fatal)
+		else
+			m_level=UNKNOWN;
 #undef XX
 }
 
