@@ -15,6 +15,7 @@
 #include "timer/util_timer.h"
 #include"http_conn/http_conn.h"
 #include"threadpool/threadpool.h"
+#include"config/config.h"
 #define FD_LIMIT 65535
 #define MAX_EVENT_NUMBER 1024
 #define TIMESLOT 5
@@ -64,17 +65,45 @@ void cb_func( client_data* user_data )
     printf( "close fd %d from %s\n", user_data->sockfd,ip);
 }
 static int cnt=0;
+#define ERROR_HANDLE(func) do{ \
+    LOG_FATAL("%s:%s",#func,strerror(errno));\
+    sleep(1);\
+    exit(EXIT_FAILURE);\
+}while(0)
+
 int main( int argc, char* argv[] ) {
+    //Configuration
+    Config* config;
+    config->getInstance().parse_arg(argc,argv);
+    Config& config_=config->getInstance();
     //Log initialization
     Log *log;
-    log->getInstance()->init("minheap",false,1024,10,2);
+    log->getInstance()->init(config_.get_logname(),config_.get_closelog(),1024,1000,2);
     log->getInstance()->setLevel(DEBUG);
-    //Parse args
-    if( argc <= 1 ) {
-        printf( "usage: %s port_number\n", basename( argv[0] ) );
-        return 1;
+    if(config_.get_help()||config_.get_port()==0){
+        struct stat statbuf;
+        int manual_fd = open( "manual2.txt", O_RDONLY );
+        if(manual_fd==-1)
+            ERROR_HANDLE(open);
+        int ret=fstat(manual_fd,&statbuf);
+        if(ret==-1)
+            ERROR_HANDLE(fstat);
+        //map then write to the stdout
+        char* manual_address = ( char* )mmap( 0, statbuf.st_size, PROT_READ, MAP_PRIVATE, manual_fd, 0 );
+        if(manual_address==MAP_FAILED)
+            ERROR_HANDLE(mmap);
+        struct iovec iov[1];
+        iov->iov_base=manual_address;
+        iov->iov_len=statbuf.st_size;
+        if(writev(STDOUT_FILENO,iov,1)==-1)
+            ERROR_HANDLE(writev);
+        //Free the resources
+        munmap(manual_address,statbuf.st_size);
+        close(manual_fd);
+        return 0;
     }
-    int port = atoi( argv[1] );
+    printf( "usage: %d port_number\n", config_.get_port());
+    int port = config_.get_port();
 
     addsig( SIGPIPE, SIG_IGN );
 

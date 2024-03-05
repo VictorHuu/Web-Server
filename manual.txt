@@ -1,0 +1,9 @@
+Usage: ./webserver [OPTIONS...] 
+  Main modes of operation: 
+   -p  the listen port for the server
+   -l The minimum log_level that will be rendered on the console
+       [DEBUG/INFO/WARN/ERROR/FATAL]
+   -t The threadnum in the threadpool
+   -n The suffix for the logname
+   -o If enabled,it enters the release mode
+   -h The mannual for this program
