@@ -18,10 +18,7 @@ enum Level{
 		ERROR,
 		FATAL,
 		UNKNOWN
-	};
-class LogLevel{
-	
-	Level m_level;
+};
 #define COLOR_DEBUG     "\x1b[97m"
 #define COLOR_INFO   "\x1b[34m"
 #define COLOR_WARN  "\x1b[35m"
@@ -30,8 +27,9 @@ class LogLevel{
 #define COLOR_RESET   "\x1b[0m"
 #define COLOR_GRAY "\033[90m"
 #define BOLD "\033[1m"
+class LogLevel{
+	Level m_level;
 public:
-	
 	const char* toColoredString();
 	void FromString(const char* str);
 	void setLevel(const Level& level);

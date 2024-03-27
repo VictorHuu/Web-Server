@@ -1,3 +1,4 @@
+#include <stdexcept>
 #include"threadpool.h"
 #ifndef VICTOR_THREADPOOL_CC
 #define VICTOR_THREADPOOL_CC
@@ -6,7 +7,7 @@ threadpool<T>::threadpool(int thread_num, int max_requests)
 {
 	
 	if(thread_num<0||max_requests<0)
-		throw std::exception();
+		throw std::invalid_argument("The thread_num and max_requests must be greater than 0");
 	m_thread_num=thread_num;
 	m_max_requests=max_requests;
 	
@@ -14,27 +15,27 @@ threadpool<T>::threadpool(int thread_num, int max_requests)
 	
 	if (pthread_attr_init(&m_attr) != 0) {
         perror("pthread_attr_init");
-        throw std::exception();
+        throw std::runtime_error("pthread_attr_init failed");
     }
 
     // 设置线程为分离状态
     if (pthread_attr_setdetachstate(&m_attr, PTHREAD_CREATE_DETACHED) != 0) {
         perror("pthread_attr_setdetachstate");
         pthread_attr_destroy(&m_attr);
-        throw std::exception();
+        throw std::runtime_error("pthread_attr_setdetachstate failed");
     }
 	for(int i=0;i<m_thread_num;i++){
 		printf( "create the %dth thread\n", i);
 		pthread_t threadId;
 		if(pthread_create(&threadId,&m_attr,worker,this)){
 			perror("pthread_create");
-			throw std::exception();
+			throw std::runtime_error("pthread_create");
 		}
 		m_threads.emplace_back(threadId);
 	}
     m_threads.shrink_to_fit();
 	
-	pthread_mutex_init(&m_queuelocker,NULL);
+	pthread_mutex_init(&m_queuelocker,nullptr);
 	sem_init(&m_queuestat,1,8);
 	
 }
@@ -49,7 +50,7 @@ threadpool<T>::~threadpool()
 }
 
 template <typename T>
-bool threadpool<T>::append(T *request, int state)
+bool threadpool<T>::append(T *request,[[ maybe_unused ]] int state)
 {
 	pthread_mutex_lock(&m_queuelocker);
     if(m_workqueue.size()>m_max_requests){
@@ -57,7 +58,7 @@ bool threadpool<T>::append(T *request, int state)
 		return false;
 	}
 
-	//request->m_state=state;
+
 	m_workqueue.push(request);
 	pthread_mutex_unlock(&m_queuelocker);
 	sem_post(&m_queuestat);
@@ -68,7 +69,7 @@ template <typename T>
 inline void *threadpool<T>::worker(void *arg)
 {
 
-    threadpool * pool=(threadpool*)arg;
+    auto pool=(threadpool*)arg;
 	pool->run();
 	return pool;
 }

@@ -11,6 +11,8 @@ template <typename T>
 class threadpool{
 public:
 	threadpool(int thread_num=8,int max_requests=10000);
+    threadpool& operator=(const threadpool& other)=delete;
+    threadpool(const threadpool& other)=delete;
 	~threadpool();
 	bool append(T *request, int state);
 
