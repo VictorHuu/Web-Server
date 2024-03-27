@@ -154,7 +154,7 @@ bool block_queue<T>::pop(T &item, int ms_timeout)
 {
     struct timespec t = {0, 0};
     struct timeval now = {0, 0};
-    gettimeofday(&now, NULL);
+    gettimeofday(&now, nullptr);
     m_mutex.lock();
     if (m_size <= 0)
     {

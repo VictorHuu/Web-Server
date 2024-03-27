@@ -32,7 +32,7 @@ public:
     static const int WRITE_BUFFER_SIZE = 1024;  
     
     
-    enum METHOD {GET = 0, POST, HEAD, PUT, DELETE, TRACE, OPTIONS, CONNECT};
+    enum class METHOD {GET = 0, POST, HEAD, PUT, DELETE, TRACE, OPTIONS, CONNECT};
     
     /*
         解析客户端请求时，主状态机的状态
@@ -40,7 +40,7 @@ public:
         CHECK_STATE_HEADER:当前正在分析头部字段
         CHECK_STATE_CONTENT:当前正在解析请求体
     */
-    enum CHECK_STATE { CHECK_STATE_REQUESTLINE = 0, CHECK_STATE_HEADER, CHECK_STATE_CONTENT };
+    enum class CHECK_STATE { CHECK_STATE_REQUESTLINE = 0, CHECK_STATE_HEADER, CHECK_STATE_CONTENT };
     
     /*
         服务器处理HTTP请求的可能结果，报文解析的结果
@@ -53,15 +53,15 @@ public:
         INTERNAL_ERROR      :   表示服务器内部错误
         CLOSED_CONNECTION   :   表示客户端已经关闭连接了
     */
-    enum HTTP_CODE { NO_REQUEST, GET_REQUEST, BAD_REQUEST, NO_RESOURCE, FORBIDDEN_REQUEST, FILE_REQUEST, INTERNAL_ERROR, CLOSED_CONNECTION };
+    enum class HTTP_CODE { NO_REQUEST, GET_REQUEST, BAD_REQUEST, NO_RESOURCE, FORBIDDEN_REQUEST, FILE_REQUEST, INTERNAL_ERROR, CLOSED_CONNECTION };
     
     
     
-    enum LINE_STATUS { LINE_OK = 0, LINE_BAD, LINE_OPEN };
-public:
-    http_conn(){}
-    ~http_conn(){}
-public:
+    enum class LINE_STATUS { LINE_OK = 0, LINE_BAD, LINE_OPEN };
+
+    http_conn()=default;
+    ~http_conn()=default;
+
     void init(int sockfd, const sockaddr_in& addr); 
     void close_conn();  
     void process(); 
@@ -75,7 +75,7 @@ private:
     
     HTTP_CODE parse_request_line( char* text );
     HTTP_CODE parse_headers( char* text );
-    HTTP_CODE parse_content( char* text );
+    HTTP_CODE parse_content( char* text )const;
     HTTP_CODE do_request();
     char* get_line() { return m_read_buf + m_start_line; }
     LINE_STATUS parse_line();
@@ -93,7 +93,7 @@ private:
     bool add_ua();
     bool add_mime();
 
-    const char* find_value(const char *filename, const char *key);
+    const char* find_value(const char *filename, const char *key) const;
 public:
     static int m_epollfd;       
     static int m_user_count;    
@@ -102,7 +102,7 @@ private:
     int m_sockfd;           
     sockaddr_in m_address;
     
-    char m_read_buf[ READ_BUFFER_SIZE ];    
+    char m_read_buf[ READ_BUFFER_SIZE ];
     int m_read_idx;                         
     int m_checked_idx;                      
     int m_start_line;                       
@@ -110,7 +110,7 @@ private:
     CHECK_STATE m_check_state;              
     METHOD m_method;                        
 
-    char m_real_file[ FILENAME_LEN ];       
+    char m_real_file[ FILENAME_LEN ];
     char* m_url;                        
     char* m_version;                        
     char* m_host;                           

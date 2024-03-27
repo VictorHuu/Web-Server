@@ -6,17 +6,19 @@
 #include <pthread.h>
 #include <sys/time.h>
 #include "../lock/lock.h"
-using namespace std;
 
 template <class T>
 class block_queue
 {
 public:
-    block_queue(int max_size = 1000);
+    explicit block_queue(int max_size = 1000);
+    block_queue(const block_queue& other) = delete;
 
+    block_queue& operator=(const block_queue& other) = delete;
     void clear();
 
     ~block_queue();
+
     //判断队列是否满了
     bool full();
     //判断队列是否为空

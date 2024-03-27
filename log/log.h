@@ -1,8 +1,5 @@
 #ifndef VICTOR_LOG_H
 #define VICTOR_LOG_H
-#define MAX_PATH_LEN 128
-#define MAX_LOGNAME_LEN 128
-#define MAX_TOTAL_LOG_NAME MAX_PATH_LEN+MAX_LOGNAME_LEN
 #include<string.h>
 #include<string>
 #include<stdint.h>
@@ -17,7 +14,10 @@
 #include"log_level.h"
 #include"block_queue.h"
 
-using namespace std;
+constexpr size_t MAX_PATH_LEN=128;
+constexpr size_t MAX_LOGNAME_LEN=128;
+constexpr size_t MAX_TOTAL_LOG_NAME=MAX_PATH_LEN+MAX_LOGNAME_LEN;
+
 class Log{
 private:
 	char dir_name[MAX_PATH_LEN];

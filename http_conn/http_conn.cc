@@ -1,19 +1,19 @@
 #include "http_conn.h"
 #include<string.h>
 // 定义HTTP响应的一些状态信息
-const char* ok_200_title = "OK";
-const char* ok_204_title = "No Content";
-const char* error_400_title = "Bad Request";
-const char* error_400_form = "Your request has bad syntax or is inherently impossible to satisfy.\n";
-const char* error_403_title = "Forbidden";
-const char* error_403_form = "You do not have permission to get file from this server.\n";
-const char* error_404_title = "Not Found";
-const char* error_404_form = "The requested file was not found on this server.\n";
-const char* error_500_title = "Internal Error";
-const char* error_500_form = "There was an unusual problem serving the requested file.\n";
+const char* const ok_200_title = "OK";
+const char* const ok_204_title = "No Content";
+const char* const error_400_title = "Bad Request";
+const char* const error_400_form = "Your request has bad syntax or is inherently impossible to satisfy.\n";
+const char* const error_403_title = "Forbidden";
+const char* const error_403_form = "You do not have permission to get file from this server.\n";
+const char* const error_404_title = "Not Found";
+const char* const error_404_form = "The requested file was not found on this server.\n";
+const char* const error_500_title = "Internal Error";
+const char* const error_500_form = "There was an unusual problem serving the requested file.\n";
 
 // 网站的根目录
-const char* doc_root = "/home/victor/sylar/resources";
+const char* const doc_root = "/home/victor/sylar/resources";
 
 int setnonblocking( int fd ) {
     int old_option = fcntl( fd, F_GETFL );
@@ -39,7 +39,7 @@ void addfd( int epollfd, int fd, bool one_shot ) {
 
 // 从epoll中移除监听的文件描述符
 void removefd( int epollfd, int fd ) {
-    epoll_ctl( epollfd, EPOLL_CTL_DEL, fd, 0 );
+    epoll_ctl( epollfd, EPOLL_CTL_DEL, fd, nullptr );
     close(fd);
 }
 
@@ -80,20 +80,20 @@ void http_conn::init(int sockfd, const sockaddr_in& addr){
 
 void http_conn::init()
 {
-    m_check_state = CHECK_STATE_REQUESTLINE;    // 初始状态为检查请求行
+    m_check_state = CHECK_STATE::CHECK_STATE_REQUESTLINE;    // 初始状态为检查请求行
     m_linger = false;       // 默认不保持链接  Connection : keep-alive保持连接
 
-    m_method = GET;         // 默认请求方式为GET
-    m_url = 0;              
-    m_version = 0;
+    m_method = METHOD::GET;         // 默认请求方式为GET
+    m_url = nullptr;
+    m_version = nullptr;
     m_content_length = 0;
-    m_host = 0;
+    m_host = nullptr;
     m_start_line = 0;
     m_checked_idx = 0;
     m_read_idx = 0;
     m_write_idx = 0;
     bzero(m_read_buf, READ_BUFFER_SIZE);
-    bzero(m_write_buf, READ_BUFFER_SIZE);
+    bzero(m_write_buf, WRITE_BUFFER_SIZE);
     bzero(m_real_file, FILENAME_LEN);
 }
 
@@ -102,7 +102,7 @@ bool http_conn::read() {
     if( m_read_idx >= READ_BUFFER_SIZE ) {
         return false;
     }
-    int bytes_read = 0;
+    ssize_t bytes_read = 0;
     while(true) {
         // 从m_read_buf + m_read_idx索引出开始保存数据，大小是READ_BUFFER_SIZE - m_read_idx
         bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, 
@@ -129,37 +129,37 @@ http_conn::LINE_STATUS http_conn::parse_line() {
 
         if ( temp == '\r' ) {
             if ( ( m_checked_idx + 1 ) == m_read_idx ) {
-                return LINE_OPEN;
+                return LINE_STATUS::LINE_OPEN;
             } else if ( m_read_buf[ m_checked_idx + 1 ] == '\n' ) {
                 m_read_buf[ m_checked_idx++ ] = '\0';
                 m_read_buf[ m_checked_idx++ ] = '\0';
-                return LINE_OK;
+                return LINE_STATUS::LINE_OK;
             }
-            return LINE_BAD;
+            return LINE_STATUS::LINE_BAD;
         } else if( temp == '\n' )  {
             if( ( m_checked_idx > 1) && ( m_read_buf[ m_checked_idx - 1 ] == '\r' ) ) {
                 m_read_buf[ m_checked_idx-1 ] = '\0';
                 m_read_buf[ m_checked_idx++ ] = '\0';
-                return LINE_OK;
+                return LINE_STATUS::LINE_OK;
             }
-            return LINE_BAD;
+            return LINE_STATUS::LINE_BAD;
         }
     }
     
-    return LINE_OPEN;
+    return LINE_STATUS::LINE_OPEN;
 }
 // 解析HTTP请求行，获得请求方法，目标URL,以及HTTP版本号
 http_conn::HTTP_CODE http_conn::parse_request_line(char* text) {
     // GET /index.html HTTP/1.1
     m_url = strpbrk(text, " \t"); // 判断第二个参数中的字符哪个在text中最先出现
     if (! m_url) { 
-        return BAD_REQUEST;
+        return HTTP_CODE::BAD_REQUEST;
     }
     // GET\0/index.html HTTP/1.1
     *m_url++ = '\0';    // 置位空字符，字符串结束符
-    char* method = text;
-#define XX(METHOD) if( strcasecmp(method, #METHOD) == 0 ) { \
-        m_method = METHOD; \
+    const char* method = text;
+#define XX(str) if( strcasecmp(method, #str) == 0 ) { \
+        m_method = METHOD::str; \
     } \
 
     XX(GET)
@@ -170,17 +170,17 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char* text) {
     else XX(OPTIONS)
     else XX(TRACE)
     else
-        return BAD_REQUEST;
+        return HTTP_CODE::BAD_REQUEST;
 #undef XX
     // /index.html HTTP/1.1
     // 检索字符串 str1 中第一个不在字符串 str2 中出现的字符下标。
     m_version = strpbrk( m_url, " \t" );
     if (!m_version) {
-        return BAD_REQUEST;
+        return HTTP_CODE::BAD_REQUEST;
     }
     *m_version++ = '\0';
     if (strcasecmp( m_version, "HTTP/1.1") != 0 ) {
-        return BAD_REQUEST;
+        return HTTP_CODE::BAD_REQUEST;
     }
     /**
      * http://192.168.110.129:10000/index.html
@@ -191,10 +191,10 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char* text) {
         m_url = strchr( m_url, '/' );
     }
     if ( !m_url || m_url[0] != '/' ) {
-        return BAD_REQUEST;
+        return HTTP_CODE::BAD_REQUEST;
     }
-    m_check_state = CHECK_STATE_HEADER; // 检查状态变成检查头
-    return NO_REQUEST;
+    m_check_state = CHECK_STATE::CHECK_STATE_HEADER; // 检查状态变成检查头
+    return HTTP_CODE::NO_REQUEST;
 }
 
 // 解析HTTP请求的一个头部信息
@@ -204,11 +204,11 @@ http_conn::HTTP_CODE http_conn::parse_headers(char* text) {
         // 如果HTTP请求有消息体，则还需要读取m_content_length字节的消息体，
         // 状态机转移到CHECK_STATE_CONTENT状态
         if ( m_content_length != 0 ) {
-            m_check_state = CHECK_STATE_CONTENT;
-            return NO_REQUEST;
+            m_check_state = CHECK_STATE::CHECK_STATE_CONTENT;
+            return HTTP_CODE::NO_REQUEST;
         }
         // 否则说明我们已经得到了一个完整的HTTP请求
-        return GET_REQUEST;
+        return HTTP_CODE::GET_REQUEST;
     } else if ( strncasecmp( text, "Connection:", 11 ) == 0 ) {
         // 处理Connection 头部字段  Connection: keep-alive
         text += 11;
@@ -220,7 +220,7 @@ http_conn::HTTP_CODE http_conn::parse_headers(char* text) {
         // 处理Content-Length头部字段
         text += 15;
         text += strspn( text, " \t" );
-        m_content_length = atol(text);
+        m_content_length = atoi(text);
     } else if ( strncasecmp( text, "Host:", 5 ) == 0 ) {
         // 处理Host头部字段
         text += 5;
@@ -252,62 +252,62 @@ http_conn::HTTP_CODE http_conn::parse_headers(char* text) {
         m_upgrade_insecure_requests = text;
     }
     else{
-        LOG_FATAL( "oop! unknow header %s\n", text );
+        LOG_FATAL( "oop! unknow header %s\n", text )
     }
-    return NO_REQUEST;
+    return HTTP_CODE::NO_REQUEST;
 }
 
 // 我们没有真正解析HTTP请求的消息体，只是判断它是否被完整的读入了
-http_conn::HTTP_CODE http_conn::parse_content( char* text ) {
+http_conn::HTTP_CODE http_conn::parse_content( char* text ) const{
     if ( m_read_idx >= ( m_content_length + m_checked_idx ) )
     {
         text[ m_content_length ] = '\0';
-        return GET_REQUEST;
+        return HTTP_CODE::GET_REQUEST;
     }
-    return NO_REQUEST;
+    return HTTP_CODE::NO_REQUEST;
 }
 
 // 主状态机，解析请求
 http_conn::HTTP_CODE http_conn::process_read() {
-    LINE_STATUS line_status = LINE_OK;
-    HTTP_CODE ret = NO_REQUEST;
-    char* text = 0;
-    while (((m_check_state == CHECK_STATE_CONTENT) && (line_status == LINE_OK))
-                || ((line_status = parse_line()) == LINE_OK)) {
+    LINE_STATUS line_status = LINE_STATUS::LINE_OK;
+    HTTP_CODE ret = HTTP_CODE::NO_REQUEST;
+    char* text = nullptr;
+    while (((m_check_state == CHECK_STATE::CHECK_STATE_CONTENT) && (line_status == LINE_STATUS::LINE_OK))
+                || ((line_status = parse_line()) == LINE_STATUS::LINE_OK)) {
         // 获取一行数据
         text = get_line();
         m_start_line = m_checked_idx;
         switch ( m_check_state ) {
-            case CHECK_STATE_REQUESTLINE: {
+            case CHECK_STATE::CHECK_STATE_REQUESTLINE: {
                 ret = parse_request_line( text );
-                if ( ret == BAD_REQUEST ) {
-                    return BAD_REQUEST;
+                if ( ret == HTTP_CODE::BAD_REQUEST ) {
+                    return HTTP_CODE::BAD_REQUEST;
                 }
                 break;
             }
-            case CHECK_STATE_HEADER: {
+            case CHECK_STATE::CHECK_STATE_HEADER: {
                 ret = parse_headers( text );
-                if ( ret == BAD_REQUEST ) {
-                    return BAD_REQUEST;
-                } else if ( ret == GET_REQUEST ) {
+                if ( ret == HTTP_CODE::BAD_REQUEST ) {
+                    return HTTP_CODE::BAD_REQUEST;
+                } else if ( ret == HTTP_CODE::GET_REQUEST ) {
                     return do_request();
                 }
                 break;
             }
-            case CHECK_STATE_CONTENT: {
+            case CHECK_STATE::CHECK_STATE_CONTENT: {
                 ret = parse_content( text );
-                if ( ret == GET_REQUEST ) {
+                if ( ret == HTTP_CODE::GET_REQUEST ) {
                     return do_request();
                 }
-                line_status = LINE_OPEN;
+                line_status = LINE_STATUS::LINE_OPEN;
                 break;
             }
             default: {
-                return INTERNAL_ERROR;
+                return HTTP_CODE::INTERNAL_ERROR;
             }
         }
     }
-    return NO_REQUEST;
+    return HTTP_CODE::NO_REQUEST;
 }
 
 // 当得到一个完整、正确的HTTP请求时，我们就分析目标文件的属性，
@@ -321,25 +321,25 @@ http_conn::HTTP_CODE http_conn::do_request()
     strncpy( m_real_file + len, m_url, FILENAME_LEN - len - 1 );
     // 获取m_real_file文件的相关的状态信息，-1失败，0成功
     if ( stat( m_real_file, &m_file_stat ) < 0 ) {
-        return NO_RESOURCE;
+        return HTTP_CODE::NO_RESOURCE;
     }
 
     // 判断访问权限
     if ( ! ( m_file_stat.st_mode & S_IROTH ) ) {
-        return FORBIDDEN_REQUEST;
+        return HTTP_CODE::FORBIDDEN_REQUEST;
     }
 
     // 判断是否是目录
     if ( S_ISDIR( m_file_stat.st_mode ) ) {
-        return BAD_REQUEST;
+        return HTTP_CODE::BAD_REQUEST;
     }
 
     // 以只读方式打开文件
     int fd = open( m_real_file, O_RDONLY );
     // 创建内存映射
-    m_file_address = ( char* )mmap( 0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0 );
+    m_file_address = ( char* )mmap( nullptr, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0 );
     close( fd );
-    return FILE_REQUEST;
+    return HTTP_CODE::FILE_REQUEST;
 }
 
 // 对内存映射区执行munmap操作
@@ -347,14 +347,14 @@ void http_conn::unmap() {
     if( m_file_address )
     {
         munmap( m_file_address, m_file_stat.st_size );
-        m_file_address = 0;
+        m_file_address = nullptr;
     }
 }
 
 // 写HTTP响应
 bool http_conn::write()
 {
-    int temp = 0;
+    ssize_t temp = 0;
     int bytes_have_send = 0;    // 已经发送的字节
     int bytes_to_send = m_write_idx;// 将要发送的字节 （m_write_idx）写缓冲区中待发送的字节数
     
@@ -365,7 +365,7 @@ bool http_conn::write()
         return true;
     }
 
-    while(1) {
+    while(true) {
         // 分散写
         temp = writev(m_sockfd, m_iv, m_iv_count);
         if ( temp <= -1 ) {
@@ -416,10 +416,11 @@ bool http_conn::add_status_line( int status, const char* title ) {
 }
 
 bool http_conn::add_headers(int content_len,const char* content_type) {
-    add_content_length(content_len);
-    add_content_type(content_type);
-    add_linger();
-    add_blank_line();
+    bool flag1=add_content_length(content_len);
+    bool flag2=add_content_type(content_type);
+    bool flag3=add_linger();
+    bool flag4=add_blank_line();
+    return flag1&&flag2&&flag3&&flag4;
 }
 
 bool http_conn::add_content_length(int content_len) {
@@ -451,99 +452,97 @@ bool http_conn::add_content( const char* content )
 bool http_conn::add_content_type(const char* content_type) {
     return add_response("Content-Type:%s\r\n", content_type);
 }
-const char* http_conn::find_value(const char *filename, const char *key) {
-#define MAX_LINE_LENGTH 25
+
+extern "C" const char* http_conn::find_value(const char *filename, const char *key) const {
+constexpr int MAX_LINE_LENGTH=25;
     static char value[MAX_LINE_LENGTH];
     FILE *file = fopen(filename, "r");
-    if (file == NULL) {
+    if (file == nullptr) {
         printf("Failed to open config file\n");
-        return NULL;
+        return nullptr;
     }
 
     char line[MAX_LINE_LENGTH];
-    while (fgets(line, MAX_LINE_LENGTH, file) != NULL) {
+    while (fgets(line, MAX_LINE_LENGTH, file) != nullptr) {
+        char * saveptr=nullptr;
         // 使用 strtok 函数分割行
-        char *token = strtok(line, ":");
-        if (token != NULL) {
+        char *token = strtok_r(line, ":",&saveptr);
+        if (token != nullptr&&strstr(key,token)) {
             // 如果 key 匹配，则返回对应的 value
-            if (strstr(key,token)) {
-                token = strtok(NULL, ":");
-                if (token != NULL) {
-                    char *newline = strchr(token, '\n');
-                    if (newline != NULL) {
-                        *newline = '\0';
-                    }
-                    newline = strchr(line, '\r');
-                    if (newline != NULL) {
-                        *newline = '\0';
-                    }
-                    strcpy(value, token);
-                    fclose(file);
-#undef MAX_LINE_LENGTH
-                    return value;
+            token = strtok_r(nullptr, ":",&saveptr);
+            if (token != nullptr) {
+                char *newline = strchr(token, '\n');
+                if (newline != nullptr) {
+                    *newline = '\0';
                 }
+                newline = strchr(line, '\r');
+                if (newline != nullptr) {
+                    *newline = '\0';
+                }
+                strcpy(value, token);
+                fclose(file);
+                return value;
             }
         }
     }
 
     fclose(file);
-#undef MAX_LINE_LENGTH
-    return NULL;
+    return nullptr;
 }
 // 根据服务器处理HTTP请求的结果，决定返回给客户端的内容
 bool http_conn::process_write(HTTP_CODE ret) {
     switch (ret)
     {
-        case INTERNAL_ERROR:
+        case HTTP_CODE::INTERNAL_ERROR:
             add_status_line( 500, error_500_title );
             add_headers( strlen( error_500_form ) );
             if ( ! add_content( error_500_form ) ) {
                 return false;
             }
             break;
-        case BAD_REQUEST:
+        case HTTP_CODE::BAD_REQUEST:
             add_status_line( 400, error_400_title );
             add_headers( strlen( error_400_form ) );
             if ( ! add_content( error_400_form ) ) {
                 return false;
             }
             break;
-        case NO_RESOURCE:
+        case HTTP_CODE::NO_RESOURCE:
             add_status_line( 404, error_404_title );
             add_headers( strlen( error_404_form ) );
             if ( ! add_content( error_404_form ) ) {
                 return false;
             }
             break;
-        case FORBIDDEN_REQUEST:
+        case HTTP_CODE::FORBIDDEN_REQUEST:
             add_status_line( 403, error_403_title );
             add_headers(strlen( error_403_form));
             if ( ! add_content( error_403_form ) ) {
                 return false;
             }
             break;
-        case FILE_REQUEST:{
-            if(m_method==DELETE)
+        case HTTP_CODE::FILE_REQUEST:{
+            if(m_method==METHOD::DELETE)
                 add_status_line(204, ok_204_title );
             else{
                 add_status_line(200, ok_200_title );
             }
-            //TODO :optimize by ENUM or File I/O
+            //DONE:optimize by ENUM or File I/O
             //Judge if it's image or not
-            if(m_method!=OPTIONS){
+            if(m_method!=METHOD::OPTIONS){
                 const char* mime=find_value("formatlist.txt",m_url);
-                bool not_image=(mime==NULL);
+                bool not_image=(mime==nullptr);
                 //Judge if
                 if(not_image){
-                    LOG_ERROR("URL is just a text html\n");
-                    add_headers(m_file_stat.st_size);
+                    LOG_ERROR("URL is just a text html\n")
+                    add_headers(static_cast<int>(m_file_stat.st_size));
                 }else{
-                    LOG_INFO("URL contains *%s*\n", mime);
-                    add_headers(m_file_stat.st_size,mime);
+                    LOG_INFO("URL contains *%s*\n", mime)
+                    add_headers(static_cast<int>(m_file_stat.st_size),mime);
                 }
             }
             switch(m_method){
-                case GET:{
+                case METHOD::GET:{
                     m_iv[0].iov_base = m_write_buf;
                     m_iv[0].iov_len = m_write_idx;
                     m_iv[1].iov_base = m_file_address;
@@ -551,15 +550,15 @@ bool http_conn::process_write(HTTP_CODE ret) {
                     m_iv_count = 2;
                     return true;
                 }
-                case DELETE:
+                case METHOD::DELETE:
                     remove(m_real_file);
-                case HEAD:{
+                case METHOD::HEAD:{
                     m_iv[0].iov_base = m_write_buf;
                     m_iv[0].iov_len = m_write_idx;
                     m_iv_count =1;
                     return true;
                 }
-                case OPTIONS:
+                case METHOD::OPTIONS:
                     add_response("Allow: %s,%s,%s","HEAD","GET","OPTIONS");
                     m_iv[0].iov_base = m_write_buf;
                     m_iv[0].iov_len = m_write_idx;
@@ -587,7 +586,7 @@ bool http_conn::process_write(HTTP_CODE ret) {
 void http_conn::process() {
     // 解析HTTP请求
     HTTP_CODE read_ret = process_read();
-    if ( read_ret == NO_REQUEST ) {
+    if ( read_ret == HTTP_CODE::NO_REQUEST ) {
         modfd( m_epollfd, m_sockfd, EPOLLIN );
         return;
     }

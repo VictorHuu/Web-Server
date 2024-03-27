@@ -1,20 +1,10 @@
 #include "config.h"
 Config::Config(){
-    m_port=0;
-    m_threadnum=8;
-    m_loglevel=DEBUG;
-    m_closelog=false;
-    m_help=false;
-    m_logname=(char*)malloc(100);
-    strcpy(m_logname,"fransics");
+    strncpy(m_logname,"fransics",MAX_LOGNAME_LEN);
 }
 Config& Config::getInstance(){
     static Config handler;
     return handler;
-}
-Config::~Config()
-{
-    free(m_logname);
 }
 void Config::parse_arg(int argc, char *argv[])
 {
@@ -48,7 +38,7 @@ void Config::parse_arg(int argc, char *argv[])
         }
         case 'o':
         {
-            m_closelog = (strcasestr(optarg,"y")!=NULL);
+            m_closelog = (strcasestr(optarg,"y")!=nullptr);
             break;
         }
         case 'h':

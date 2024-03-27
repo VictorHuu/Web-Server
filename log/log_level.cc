@@ -9,11 +9,11 @@ const char* LogLevel::toColoredString(){
 #define XX(name) \
 		case name: \
 			return  CONCAT(COLOR_, name) BRACKET(name) COLOR_RESET;
-		XX(DEBUG);
-		XX(INFO);
-		XX(WARN);
-		XX(ERROR);
-		XX(FATAL);
+		XX(DEBUG)
+		XX(INFO)
+		XX(WARN)
+		XX(ERROR)
+		XX(FATAL)
 #undef XX
 #undef BRACKET
 #undef CONCAT
