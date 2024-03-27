@@ -82,7 +82,7 @@ private:
 
     
     void unmap();
-    bool add_response( const char* format, ... ) __attribute__((format(printf,1,2)));
+    bool add_response( const char* format, ... );
     bool add_content( const char* content );
     bool add_content_type(const char* content_type);
     bool add_status_line( int status, const char* title );
