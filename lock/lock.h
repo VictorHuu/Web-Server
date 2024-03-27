@@ -4,18 +4,21 @@
 #include<semaphore.h>
 #include<pthread.h>
 #include <stdexcept>
+#include <system_error>
 class sem{
 private:
 	sem_t m_sem;
 public:
 	sem(){
 		if(sem_init(&m_sem,0,0)){
-			throw std::runtime_error("pshared is nonzero, but the system does not support process-shared semaphores");
+			throw std::system_error();
 		}
 	}
 	explicit sem(int num){
 		if(sem_init(&m_sem,0,num)){
-			throw std::exception();
+            if(num<0)
+                throw std::invalid_argument("The num must be greater than 0");
+			throw std::system_error();
 		}
 	}
     sem(const sem& other) = delete;
@@ -38,7 +41,7 @@ private:
 public:
 	locker(){
 		if(pthread_mutex_init(&m_locker,nullptr)){
-			throw std::exception();
+			throw std::bad_alloc();
 		}
 	}
     locker(const locker& other) = delete;
@@ -65,7 +68,7 @@ private:
 public:
 	cond(){
 		if(pthread_cond_init(&m_cond,nullptr)){
-			throw std::exception();
+			throw std::bad_alloc();
 		}
 	}
     cond(const cond& other) = delete;

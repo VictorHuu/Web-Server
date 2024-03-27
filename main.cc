@@ -69,6 +69,60 @@ static int cnt=0;
     sleep(1);\
     exit(EXIT_FAILURE);\
 }while(0)
+int handle_listener(int listenfd,http_conn* userconns,client_data* users){
+    struct sockaddr_in client_address;
+    socklen_t client_addrlength = sizeof( client_address );
+    int connfd = accept( listenfd, ( struct sockaddr* )&client_address, &client_addrlength );
+
+    if ( connfd < 0 ) {
+        printf( "errno is: %d\n", errno );
+        return -1;
+    }
+
+    if( http_conn::m_user_count >= FD_LIMIT ) {
+        close(connfd);
+        return -1;
+    }
+
+    users[connfd].address = client_address;
+    users[connfd].sockfd = connfd;
+
+
+    auto timer = new util_timer_node(cnt++,&users[connfd],3 * TIMESLOT,cb_func);
+    users[connfd].timer = timer;
+    timer_lst.add_timer( timer );
+
+    userconns[connfd].init( connfd, client_address);
+    return 0;
+}
+int handle_sig(bool& stop_server,int&ret,bool&timeout){
+    char signals[1024];
+    ret = static_cast<int> (recv( pipefd[0], signals, sizeof( signals ), 0 ));
+    if( ret == -1 ) {
+        return -1;
+    } else if( ret == 0 ) {
+        return -1;
+    } else  {
+        for( int j = 0; j < ret; ++j ) {
+            switch( signals[j] )  {
+                case SIGALRM:
+                {
+
+                    timeout = true;
+                    break;
+                }
+                case SIGTERM:
+                {
+                    stop_server = true;
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+    }
+    return 0;
+}
 int configure(int argc, char* argv[]){
     Config::getInstance().parse_arg(argc,argv);
 
@@ -110,6 +164,68 @@ int configure(int argc, char* argv[]){
     }
     return 1;
 }
+void handle_in(http_conn* userconns,client_data* users,const int& sockfd,threadpool<http_conn>* pool,const int& ret){
+
+    if(userconns[sockfd].read()) {
+        pool->append(userconns + sockfd,0);
+    } else {
+        userconns[sockfd].close_conn();
+    }
+
+    util_timer_node* timer = users[sockfd].timer;
+    if( ret < 0 )
+    {
+
+        if( errno != EAGAIN )
+        {
+            cb_func( &users[sockfd] );
+            if( timer )
+            {
+                timer_lst.del_timer( timer );
+            }
+        }
+    }
+    else if( ret == 0 )
+    {
+
+        cb_func( &users[sockfd] );
+        if( timer )
+        {
+            timer_lst.del_timer( timer );
+        }
+    }
+    else
+    {
+
+        if( timer ) {
+            printf( "adjust timer once\n" );
+            timer_lst.adjust_timer( timer,3 * TIMESLOT );
+            LOG_DEBUG("Here!")
+        }
+    }
+}
+void process(const int& sockfd,const int& listenfd,client_data* users,http_conn* userconns,const int& i,bool& timeout,int& ret,
+             const epoll_event* events,threadpool<http_conn>* pool,bool& stop_server){
+    if( sockfd == listenfd )
+    {
+        if(handle_listener(listenfd,userconns,users)==-1)
+            return;
+    }else if( events[i].events & ( EPOLLRDHUP | EPOLLHUP | EPOLLERR ) ) {
+
+        userconns[sockfd].close_conn();
+
+    }else if( ( sockfd == pipefd[0] ) && ( events[i].events & EPOLLIN ) ) {
+        int lret=handle_sig(stop_server,ret,timeout);
+        if(lret==-1)
+            return;
+    }
+    else if(  events[i].events & EPOLLIN )
+    {
+        handle_in(userconns,users,sockfd,pool,ret);
+    }else if(( events[i].events & EPOLLOUT ) &&!userconns[sockfd].write()){
+        userconns[sockfd].close_conn();
+    }
+}
 int main( int argc, char* argv[] ) {
     //Configuration
     if(int ret=configure(argc,argv);ret==0) {
@@ -126,7 +242,7 @@ int main( int argc, char* argv[] ) {
     threadpool< http_conn >* pool = nullptr;
     try {
         pool = new threadpool<http_conn>(config_.get_threadnum());
-    } catch( ... ) {
+    } catch( std::invalid_argument&) {
         return 1;
     }
 
@@ -180,107 +296,7 @@ int main( int argc, char* argv[] ) {
 
         for ( int i = 0; i < number; i++ ) {
             int sockfd = events[i].data.fd;
-            if( sockfd == listenfd )
-            {
-                struct sockaddr_in client_address;
-                socklen_t client_addrlength = sizeof( client_address );
-                int connfd = accept( listenfd, ( struct sockaddr* )&client_address, &client_addrlength );
-
-                if ( connfd < 0 ) {
-                    printf( "errno is: %d\n", errno );
-                    continue;
-                }
-
-                if( http_conn::m_user_count >= FD_LIMIT ) {
-                    close(connfd);
-                    continue;
-                }
-
-                users[connfd].address = client_address;
-                users[connfd].sockfd = connfd;
-
-
-                auto timer = new util_timer_node(cnt++,&users[connfd],3 * TIMESLOT,cb_func);
-                users[connfd].timer = timer;
-                timer_lst.add_timer( timer );
-
-                userconns[connfd].init( connfd, client_address);
-            }else if( events[i].events & ( EPOLLRDHUP | EPOLLHUP | EPOLLERR ) ) {
-
-                userconns[sockfd].close_conn();
-
-            }else if( ( sockfd == pipefd[0] ) && ( events[i].events & EPOLLIN ) ) {
-                char signals[1024];
-                ret = static_cast<int> (recv( pipefd[0], signals, sizeof( signals ), 0 ));
-                if( ret == -1 ) {
-                    continue;
-                } else if( ret == 0 ) {
-                    continue;
-                } else  {
-                    for( int j = 0; j < ret; ++j ) {
-                        switch( signals[j] )  {
-                            case SIGALRM:
-                            {
-
-                                timeout = true;
-                                break;
-                            }
-                            case SIGTERM:
-                            {
-                                stop_server = true;
-                                break;
-                            }
-                            default:
-                                break;
-                        }
-                    }
-                }
-            }
-            else if(  events[i].events & EPOLLIN )
-            {
-
-                if(userconns[sockfd].read()) {
-                    pool->append(userconns + sockfd,0);
-                } else {
-                    userconns[sockfd].close_conn();
-                }
-
-                util_timer_node* timer = users[sockfd].timer;
-                if( ret < 0 )
-                {
-
-                    if( errno != EAGAIN )
-                    {
-                        cb_func( &users[sockfd] );
-                        if( timer )
-                        {
-                            timer_lst.del_timer( timer );
-                        }
-                    }
-                }
-                else if( ret == 0 )
-                {
-
-                    cb_func( &users[sockfd] );
-                    if( timer )
-                    {
-                        timer_lst.del_timer( timer );
-                    }
-                }
-                else
-                {
-
-                    if( timer ) {
-                        printf( "adjust timer once\n" );
-                        timer_lst.adjust_timer( timer,3 * TIMESLOT );
-                        LOG_DEBUG("Here!")
-                    }
-                }
-            }else if(( events[i].events & EPOLLOUT ) &&!userconns[sockfd].write()){
-                    userconns[sockfd].close_conn();
-            }
-
-
+            process(sockfd,listenfd,users,userconns,i,timeout,ret,events,pool,stop_server);
         }
 
 

@@ -92,9 +92,9 @@ void http_conn::init()
     m_checked_idx = 0;
     m_read_idx = 0;
     m_write_idx = 0;
-    bzero(m_read_buf, READ_BUFFER_SIZE);
-    bzero(m_write_buf, WRITE_BUFFER_SIZE);
-    bzero(m_real_file, FILENAME_LEN);
+    memset(m_read_buf,0,READ_BUFFER_SIZE);
+    memset(m_write_buf,0,WRITE_BUFFER_SIZE);
+    memset(m_real_file,0,FILENAME_LEN);
 }
 
 // 循环读取客户数据，直到无数据可读或者对方关闭连接
@@ -452,7 +452,29 @@ bool http_conn::add_content( const char* content )
 bool http_conn::add_content_type(const char* content_type) {
     return add_response("Content-Type:%s\r\n", content_type);
 }
-
+char* parsekv(char* line,const char* key,char* value,FILE* file){
+    char * saveptr=nullptr;
+    // 使用 strtok 函数分割行
+    char *token = strtok_r(line, ":",&saveptr);
+    if (token != nullptr&&strstr(key,token)) {
+        // 如果 key 匹配，则返回对应的 value
+        token = strtok_r(nullptr, ":",&saveptr);
+        if (token != nullptr) {
+            char *newline = strchr(token, '\n');
+            if (newline != nullptr) {
+                *newline = '\0';
+            }
+            newline = strchr(line, '\r');
+            if (newline != nullptr) {
+                *newline = '\0';
+            }
+            strcpy(value, token);
+            fclose(file);
+            return value;
+        }
+    }
+    return nullptr;
+}
 extern "C" const char* http_conn::find_value(const char *filename, const char *key) const {
 constexpr int MAX_LINE_LENGTH=25;
     static char value[MAX_LINE_LENGTH];
@@ -464,26 +486,9 @@ constexpr int MAX_LINE_LENGTH=25;
 
     char line[MAX_LINE_LENGTH];
     while (fgets(line, MAX_LINE_LENGTH, file) != nullptr) {
-        char * saveptr=nullptr;
-        // 使用 strtok 函数分割行
-        char *token = strtok_r(line, ":",&saveptr);
-        if (token != nullptr&&strstr(key,token)) {
-            // 如果 key 匹配，则返回对应的 value
-            token = strtok_r(nullptr, ":",&saveptr);
-            if (token != nullptr) {
-                char *newline = strchr(token, '\n');
-                if (newline != nullptr) {
-                    *newline = '\0';
-                }
-                newline = strchr(line, '\r');
-                if (newline != nullptr) {
-                    *newline = '\0';
-                }
-                strcpy(value, token);
-                fclose(file);
-                return value;
-            }
-        }
+        const char* tmp=parsekv(line,key,value,file);
+        if(tmp!=nullptr)
+            return tmp;
     }
 
     fclose(file);
@@ -592,8 +597,7 @@ void http_conn::process() {
     }
     
     // 生成响应
-    bool write_ret = process_write( read_ret );
-    if ( !write_ret ) {
+    if ( !process_write( read_ret )) {
         close_conn();
     }
     modfd( m_epollfd, m_sockfd, EPOLLOUT);
